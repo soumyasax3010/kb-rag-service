@@ -21,22 +21,25 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 async def setup_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     # ingest one sample doc via the app's own pipeline
+    overview = (CORPUS / "01-rag-overview.md").read_bytes()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        await c.post(
+        resp = await c.post(
             "/documents",
-            files={"file": ("01-rag-overview.md", CORPUS / "01-rag-overview.md", "text/markdown")},
+            files={"file": ("01-rag-overview.md", overview, "text/markdown")},
         )
+        assert resp.status_code == 201, f"ingest failed: {resp.text}"
     yield
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_query_retrieves_overview_doc(setup_db):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post(
