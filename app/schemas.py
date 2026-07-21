@@ -33,6 +33,7 @@ class RetrievedHit(BaseModel):
     source: str
     chunk_idx: int
     score: float  # cosine distance (lower is better)
+    content: str  # full passage text (lets clients + the eval judge inspect what was retrieved)
 
 
 class QueryResponse(BaseModel):

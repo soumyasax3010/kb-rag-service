@@ -2,6 +2,9 @@
 
 The prompt gives the model numbered context passages and instructs it to cite by
 the passage number. The router maps those numbers back to concrete chunks.
+
+Uses the OpenAI SDK against any OpenAI-compatible endpoint (set
+``OPENAI_BASE_URL`` for Fireworks / local).
 """
 
 from openai import AsyncOpenAI
@@ -15,7 +18,10 @@ _client: AsyncOpenAI | None = None
 def client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(api_key=settings.openai_api_key)
+        _client = AsyncOpenAI(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+        )
     return _client
 
 
@@ -47,6 +53,7 @@ async def generate_answer(question: str, hits: list[Hit]) -> str:
     resp = await client().chat.completions.create(
         model=settings.chat_model,
         temperature=0.0,
+        max_tokens=512,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": _user_prompt(question, hits)},

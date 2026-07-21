@@ -28,7 +28,10 @@ async def setup_db():
         await conn.run_sync(Base.metadata.create_all)
     # ingest one sample doc via the app's own pipeline
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        await c.post("/documents", files={"file": ("01-rag-overview.md", CORPUS / "01-rag-overview.md", "text/markdown")})
+        await c.post(
+            "/documents",
+            files={"file": ("01-rag-overview.md", CORPUS / "01-rag-overview.md", "text/markdown")},
+        )
     yield
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -36,7 +39,9 @@ async def setup_db():
 
 async def test_query_retrieves_overview_doc(setup_db):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        resp = await c.post("/query", json={"question": "What are the three stages of RAG?", "top_k": 5})
+        resp = await c.post(
+            "/query", json={"question": "What are the three stages of RAG?", "top_k": 5}
+        )
     assert resp.status_code == 200
     body = resp.json()
     assert body["answer"]

@@ -1,5 +1,7 @@
 """Documents router: upload, list, delete."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,9 +11,11 @@ from app.schemas import DocumentOut, IngestResponse
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
 
 @router.post("", response_model=IngestResponse, status_code=201)
-async def upload_document(file: UploadFile = File(...), session: AsyncSession = Depends(get_session)):
+async def upload_document(file: Annotated[UploadFile, File()], session: SessionDep):
     data = await file.read()
     try:
         doc = await ingest_bytes(session, data, file.filename or "upload")
@@ -21,13 +25,13 @@ async def upload_document(file: UploadFile = File(...), session: AsyncSession = 
 
 
 @router.get("", response_model=list[DocumentOut])
-async def get_documents(session: AsyncSession = Depends(get_session)):
+async def get_documents(session: SessionDep):
     docs = await list_documents(session)
     return [DocumentOut.model_validate(d) for d in docs]
 
 
 @router.delete("/{document_id}", status_code=204)
-async def remove_document(document_id: int, session: AsyncSession = Depends(get_session)):
+async def remove_document(document_id: int, session: SessionDep):
     deleted = await delete_document(session, document_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="document not found")

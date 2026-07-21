@@ -1,7 +1,8 @@
-"""OpenAI embeddings client.
+"""Embeddings client.
 
-Thin wrapper so the only place that knows about OpenAI for embeddings is this
-file + ``app/config.py``. Swapping providers = editing these two files.
+Uses the OpenAI SDK against any OpenAI-compatible endpoint (set
+``OPENAI_BASE_URL`` for Fireworks / local). Swapping providers = editing
+``app/config.py`` and this file only.
 """
 
 from openai import AsyncOpenAI
@@ -14,7 +15,10 @@ _client: AsyncOpenAI | None = None
 def client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(api_key=settings.openai_api_key)
+        _client = AsyncOpenAI(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+        )
     return _client
 
 

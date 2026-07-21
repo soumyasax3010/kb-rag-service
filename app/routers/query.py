@@ -1,6 +1,7 @@
 """Query router: retrieve chunks, generate a cited answer."""
 
 import re
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,12 +13,14 @@ from app.schemas import Citation, QueryRequest, QueryResponse, RetrievedHit
 
 router = APIRouter(prefix="/query", tags=["query"])
 
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
 # Matches "[1]", "[2]", possibly several in one answer.
 _CITE_RE = re.compile(r"\[(\d+)\]")
 
 
 @router.post("", response_model=QueryResponse)
-async def query(req: QueryRequest, session: AsyncSession = Depends(get_session)):
+async def query(req: QueryRequest, session: SessionDep):
     hits = await search(session, req.question, top_k=req.top_k)
 
     answer = await generate_answer(req.question, hits)
@@ -46,6 +49,7 @@ async def query(req: QueryRequest, session: AsyncSession = Depends(get_session))
                 source=h.source,
                 chunk_idx=h.chunk_idx,
                 score=h.score,
+                content=h.content,
             )
             for h in hits
         ],

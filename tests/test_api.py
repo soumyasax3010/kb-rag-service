@@ -1,6 +1,5 @@
 """API smoke test: health and document listing endpoints (no DB writes)."""
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app

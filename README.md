@@ -2,11 +2,14 @@
 
 A knowledge-base service backed by **retrieval-augmented generation**. Upload
 documents, ask questions, get answers **cited back to source passages**. Built
-with FastAPI, Postgres + pgvector, and OpenAI — and shipped with an **eval
-harness** that reports recall@5 and faithfulness so changes are measurable.
+with FastAPI, Postgres + pgvector, and any **OpenAI-compatible** embedding/chat
+endpoint (defaults to Fireworks; OpenAI is a one-line switch) — and shipped with
+an **eval harness** that reports recall@5 and faithfulness so changes are
+measurable.
 
 > Resume-anchor project. The point is engineering judgment, not a demo: a real
-> vector store, citations as a first-class output, and numbers in the README.
+> vector store, citations as a first-class output, a provider-agnostic client,
+> and numbers in the README.
 
 <!-- badges -->
 ![CI](https://github.com/<user>/kb-rag-service/actions/workflows/ci.yml/badge.svg)
@@ -34,26 +37,40 @@ flowchart LR
 ```
 
 - **Ingest** (`POST /documents`): parse → token-based chunking (512 tok, 64
-  overlap) → embed (`text-embedding-3-small`) → store in pgvector with
-  `(document_id, chunk_idx, source, content)`.
+  overlap) → embed (`nomic-ai/nomic-embed-text-v1.5`, 768-dim by default) →
+  store in pgvector with `(document_id, chunk_idx, source, content)`.
 - **Query** (`POST /query`): embed the question → cosine search top-k over an
-  HNSW index → feed numbered passages to `gpt-4o-mini` instructed to cite by
-  passage number → map `[n]` markers back to concrete chunks → return
-  `{answer, retrieved[], citations[]}`.
+  HNSW index → feed numbered passages to the chat model (`glm-5p2` by default)
+  instructed to cite by passage number → map `[n]` markers back to concrete
+  chunks → return `{answer, retrieved[], citations[]}`.
 
 ## Quickstart
 
-Requirements: Docker, `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+Requirements: `uv` (`curl -LsSf https://astral.sh/uv/install.sh | sh`) and
+Postgres with the pgvector extension.
+
+**Postgres + pgvector** — pick one:
 
 ```bash
-git clone <repo> && cd kb-rag-service
-cp .env.example .env       # fill in OPENAI_API_KEY
-docker compose up -d        # Postgres + pgvector
+# Option A: Docker (uses the pgvector/pgvector:pg16 image in docker-compose.yml)
+docker compose up -d
+
+# Option B: macOS via Homebrew (pgvector bottle targets postgresql@17)
+brew install postgresql@17 pgvector
+brew services start postgresql@17
+psql -d postgres -c "CREATE ROLE kb WITH LOGIN PASSWORD 'kb';"
+psql -d postgres -c "CREATE DATABASE kb OWNER kb;"
+psql -d kb -c "CREATE EXTENSION vector;"
+```
+
+**Run the service:**
+
+```bash
+cp .env.example .env       # set OPENAI_API_KEY (+ OPENAI_BASE_URL if not OpenAI)
 uv sync --extra dev
 uv run alembic upgrade head
 
 uv run uvicorn app.main:app --reload
-# health
 curl localhost:8000/health
 # ingest the bundled sample corpus
 for f in sample_corpus/*.md; do curl -s -F "file=@$f" localhost:8000/documents; done
@@ -61,6 +78,11 @@ for f in sample_corpus/*.md; do curl -s -F "file=@$f" localhost:8000/documents; 
 curl -s -XPOST localhost:8000/query -H 'Content-Type: application/json' \
   -d '{"question":"What are the three stages of RAG?"}' | jq
 ```
+
+The default `.env.example` is configured for **Fireworks** (OpenAI-compatible).
+For OpenAI: unset `OPENAI_BASE_URL`, set `EMBED_MODEL=text-embedding-3-small`,
+`EMBED_DIM=1536`, `CHAT_MODEL=gpt-4o-mini`, then re-run `alembic downgrade base
+&& alembic upgrade head` (the vector column dim is read from `EMBED_DIM`).
 
 ## API
 
@@ -86,12 +108,13 @@ Reports **recall@5** (retrieval) and **faithfulness** (LLM-judged generation)
 over 15 hand-labeled Q&A pairs in `evals/dataset.jsonl`, and writes
 `evals/results.json`.
 
-| Metric | Score |
-|---|---|
-| recall@5 | _<fill after first run>_ |
-| faithfulness | _<fill after first run>_ |
+| Metric | Score | Notes |
+|---|---|---|
+| recall@5 | **1.00** | every gold doc retrieved in top-5 |
+| faithfulness | **0.93** | 14/15 answers fully grounded; 1 was a judge false-negative (answer was correct + cited, judge returned 0/0) |
 
-See `evals/README.md`.
+Provider for this run: Fireworks — embeddings `nomic-ai/nomic-embed-text-v1.5`
+(768-dim), chat `accounts/fireworks/models/glm-5p2`. See `evals/README.md`.
 
 ## Design decisions
 
@@ -104,9 +127,12 @@ See `evals/README.md`.
   overlap prevents context loss at boundaries. The chunker is a pure function in
   its own module, so it's unit-tested without a DB and swappable for
   sentence/semantic chunking.
-- **OpenAI behind a thin client** — all embedding/chat calls are funneled through
-  `app/retrieval/embed.py` and `app/generation/answer.py` plus `app/config.py`.
-  Swapping providers means editing those, not the whole codebase.
+- **OpenAI behind a thin, provider-agnostic client** — all embedding/chat calls
+  go through `app/retrieval/embed.py` and `app/generation/answer.py` plus
+  `app/config.py`. The OpenAI SDK talks to any OpenAI-compatible endpoint, so
+  switching between OpenAI, Fireworks, or a local server is a `.env` change
+  (`OPENAI_BASE_URL` + model ids + `EMBED_DIM`). This repo runs on Fireworks by
+  default; OpenAI needs only the swap described in Quickstart.
 - **Citations are first-class** — chunks keep `(document_id, chunk_idx, source)`;
   the prompt forces `[n]` citation and the router resolves markers to concrete
   chunks with snippets. This is what separates a KB tool from "ChatGPT + a PDF."

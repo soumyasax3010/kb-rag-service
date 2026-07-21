@@ -17,12 +17,14 @@ Writes evals/results.json and prints a table.
 import argparse
 import asyncio
 import json
-import os
+import re
 import sys
 from pathlib import Path
 
 import httpx
 from openai import AsyncOpenAI
+
+from app.config import settings
 
 HERE = Path(__file__).parent
 DATASET = HERE / "dataset.jsonl"
@@ -64,13 +66,16 @@ async def judge_faithfulness(oai: AsyncOpenAI, answer: str, context: str) -> tup
         return (0, 0)
     prompt = JUDGE_PROMPT.format(context=context[:8000], answer=answer)
     resp = await oai.chat.completions.create(
-        model=os.environ.get("CHAT_MODEL", "gpt-4o-mini"),
+        model=settings.chat_model,
         temperature=0.0,
+        max_tokens=1024,  # reasoning models spend tokens on internal trace before JSON
         messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
     )
+    # Tolerant JSON parse: provider may wrap JSON in prose or use a reasoning trace.
+    text = resp.choices[0].message.content or ""
+    m = re.search(r"\{[^{}]*\}", text, re.DOTALL)
     try:
-        data = json.loads(resp.choices[0].message.content or "{}")
+        data = json.loads(m.group(0)) if m else {}
         return int(data.get("supported_claims", 0)), int(data.get("total_claims", 0))
     except (json.JSONDecodeError, ValueError):
         return (0, 0)
@@ -82,7 +87,7 @@ async def run(base_url: str, k: int) -> dict:
         print("No eval data found.", file=sys.stderr)
         sys.exit(1)
 
-    oai = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+    oai = AsyncOpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url)
     results = []
     async with httpx.AsyncClient(timeout=120) as client:
         for row in rows:
@@ -93,12 +98,10 @@ async def run(base_url: str, k: int) -> dict:
             retrieved_sources = [h["source"] for h in out.get("retrieved", [])][:k]
             recall = 1 if gold_doc in retrieved_sources else 0
 
-            # Join retrieved passages as the judge's context.
-            context = "\n\n".join(h["source"] for h in out.get("retrieved", []))
-            # The judge needs the actual text; re-derive from citations+retrieved is
-            # lossy, so we pass the answer's cited snippets when available.
-            snippets = [c["snippet"] for c in out.get("citations", [])]
-            context = "\n\n".join(snippets) if snippets else context
+            # Judge context = the FULL text of retrieved passages (what the generator
+            # actually saw). Using the 200-char citation snippet here was the original
+            # bug — facts often sit beyond the snippet, so the judge falsely scored 0.
+            context = "\n\n".join(h.get("content", "") for h in out.get("retrieved", []))
 
             supported, total = await judge_faithfulness(oai, out.get("answer", ""), context)
             faith = supported / total if total else 0.0
