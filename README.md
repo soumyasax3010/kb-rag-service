@@ -22,7 +22,7 @@ measurable.
 > and numbers in the README.
 
 <!-- badges -->
-![CI](https://github.com/<user>/kb-rag-service/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/soumyasax3010/kb-rag-service/actions/workflows/ci.yml/badge.svg)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org)
 
 ## Live demo
