@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Eval output
+evals/results.json
+evals/results.*
+
+# OS
+.DS_Store
