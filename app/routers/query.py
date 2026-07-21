@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.generation.answer import generate_answer
 from app.retrieval.search import search
-from app.schemas import Citation, QueryRequest, QueryResponse
+from app.schemas import Citation, QueryRequest, QueryResponse, RetrievedHit
 
 router = APIRouter(prefix="/query", tags=["query"])
 
@@ -37,4 +37,17 @@ async def query(req: QueryRequest, session: AsyncSession = Depends(get_session))
                 )
             )
 
-    return QueryResponse(question=req.question, answer=answer, citations=citations)
+    return QueryResponse(
+        question=req.question,
+        answer=answer,
+        retrieved=[
+            RetrievedHit(
+                document_id=h.document_id,
+                source=h.source,
+                chunk_idx=h.chunk_idx,
+                score=h.score,
+            )
+            for h in hits
+        ],
+        citations=citations,
+    )
