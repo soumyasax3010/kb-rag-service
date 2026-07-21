@@ -1,0 +1,25 @@
+        User
+          │
+          ▼
+     FastAPI Server
+          │
+          ▼
+     Document Upload
+          │
+          ▼
+    Text Chunking
+          │
+          ▼
+    Embedding Model
+          │
+          ▼
+     Vector Database
+          │
+          ▼
+     LangChain Retriever
+          │
+          ▼
+        LLM
+          │
+          ▼
+      Final Answer
