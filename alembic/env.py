@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app import models  # noqa: F401  (register tables on Base.metadata)
 from app.config import settings
-from app.db import Base
+from app.db import Base, build_connect_args
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
@@ -43,6 +43,7 @@ async def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=build_connect_args(),
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

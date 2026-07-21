@@ -1,3 +1,13 @@
+---
+title: KB RAG Service
+emoji: 📚
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # KB RAG Service
 
 A knowledge-base service backed by **retrieval-augmented generation**. Upload
@@ -97,6 +107,62 @@ For OpenAI: unset `OPENAI_BASE_URL`, set `EMBED_MODEL=text-embedding-3-small`,
 `citations[]` = the chunks the model chose to cite (with source + snippet);
 `retrieved[]` = the full top-k actually retrieved (with cosine distance) — useful
 for debugging retrieval and for the eval harness.
+
+## Deploy (live demo, no credit card)
+
+Two free accounts: **Supabase** for Postgres+pgvector, **Hugging Face Space**
+(Docker SDK) for the app. No card needed on either.
+
+### 1. Supabase — database
+
+1. Create a free project at supabase.com.
+2. Dashboard → **Database → Extensions** → enable `vector`.
+3. Dashboard → **Project Settings → Database → Connection string → URI** → copy
+   the **direct** string (host `db.<ref>.supabase.co:5432`), e.g.
+   `postgresql://postgres:[PW]@db.<ref>.supabase.co:5432/postgres`.
+4. Convert to the asyncpg form (note the `+asyncpg`):
+   `postgresql+asyncpg://postgres:[PW]@db.<ref>.supabase.co:5432/postgres`
+
+### 2. Hugging Face Space — app
+
+1. Create a Space at huggingface.co → SDK **Docker** → blank.
+2. Space **Settings → Variables and secrets**, add:
+
+   | Name | Value |
+   |---|---|
+   | `OPENAI_API_KEY` (secret) | your Fireworks key |
+   | `OPENAI_BASE_URL` | `https://api.fireworks.ai/inference/v1` |
+   | `DATABASE_URL` (secret) | the Supabase asyncpg URL from step 1.4 |
+   | `DATABASE_SSL` | `true` |
+   | `EMBED_MODEL` | `nomic-ai/nomic-embed-text-v1.5` |
+   | `EMBED_DIM` | `768` |
+   | `CHAT_MODEL` | `accounts/fireworks/models/glm-5p2` |
+
+3. Push the code to the Space's git (HF hosts its own git — this is not GitHub):
+
+   ```bash
+   cd kb-rag-service
+   git remote add space https://huggingface.co/spaces/<your-user>/<space-name>
+   git push space main
+   ```
+
+4. HF builds the image, runs `alembic upgrade head` (creates tables + HNSW index
+   in Supabase), then serves uvicorn on 7860. On first start the app **auto-seeds**
+   the bundled sample corpus into Supabase (only if empty), so the demo just works.
+
+5. Demo URL: `https://<your-user>-<space-name>.hf.space`. Test:
+
+   ```bash
+   curl https://<your-user>-<space-name>.hf.space/health
+   curl -XPOST https://<your-user>-<space-name>.hf.space/query \
+     -H 'Content-Type: application/json' \
+     -d '{"question":"What are the three stages of RAG?"}'
+   ```
+
+Notes: HF free CPU Spaces sleep when idle — the first request after sleep takes
+~30s to wake. If startup fails, check the Space **Logs** tab (most often a wrong
+`DATABASE_URL` or missing `vector` extension). For OpenAI instead of Fireworks,
+set the env vars accordingly and `EMBED_DIM=1536`.
 
 ## Evaluation
 

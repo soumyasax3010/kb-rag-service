@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str | None = None  # e.g. https://api.fireworks.ai/inference/v1
     database_url: str = "postgresql+asyncpg://kb:kb@localhost:5432/kb"
+    database_ssl: bool = False  # set True for managed Postgres (Supabase, etc.)
 
     embed_model: str = "text-embedding-3-small"
     embed_dim: int = 1536
