@@ -25,7 +25,10 @@ class Hit:
 
 
 async def search(session: AsyncSession, question: str, top_k: int | None = None) -> list[Hit]:
+    # Clamp even if the API validated: internal callers (e.g. evals) may bypass it,
+    # and `LIMIT -1` raises InvalidRowCountInLimitClauseError in Postgres.
     k = top_k or settings.top_k
+    k = max(1, min(k, 50))
     query_vec = await embed_query(question)
 
     stmt = (
