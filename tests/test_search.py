@@ -35,8 +35,12 @@ async def setup_db():
         )
         assert resp.status_code == 201, f"ingest failed: {resp.text}"
     yield
+    # Drop then recreate so the DB is left with a valid (empty) schema — a bare
+    # drop_all would leave no tables and crash the server's seeding lifespan on
+    # next start. (HNSW index is alembic-managed; sequential scan still works.)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
 
 
 @pytest.mark.asyncio(loop_scope="session")
